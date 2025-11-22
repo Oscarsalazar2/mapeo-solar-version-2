@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import GraficaHoras from "../components/GraficaHoras";
 import GraficaGeneral from "../components/GraficaGeneral";
+import MapaSensores from "../components/MapaSensores";
 
 // De dónde llama la API (backend Fastify)
 const API_BASE_URL = "http://localhost:3000";
+
+
 
 // CONSTANTES
 const OBJETIVO_LUX = 20000;
@@ -182,6 +185,13 @@ export default function SolarDashboardDemo() {
           </BotonPestana>
 
           <BotonPestana
+            activo={pestana === "map"}
+            onClick={() => setPestana("map")}
+          >
+            Mapa
+          </BotonPestana>
+
+          <BotonPestana
             activo={pestana === "charts"}
             onClick={() => setPestana("charts")}
           >
@@ -194,21 +204,24 @@ export default function SolarDashboardDemo() {
       <main className="max-w-6xl mx-auto px-4 py-6 grid gap-6 lg:grid-cols-[1fr_320px]">
         <section className="space-y-4">
           {pestana === "weather" ? (
-            <PanelClima />
-          ) : pestana === "sensors" ? (
-            <PanelSensores cuadricula={cuadricula} />
-          ) : pestana === "reports" ? (
-            <PanelReportes
-              rango={rangoReporte}
-              onCambioRango={setRangoReporte}
-              onAbrirModal={() => setReporteAbierto(true)}
-              filas={filasReporte}
-              cargando={cargandoReporte}
-              error={errorReporte}
-            />
-          ) : (
-            <PanelGraficas />
-          )}
+  <PanelClima />
+) : pestana === "sensors" ? (
+  <PanelSensores cuadricula={cuadricula} />
+) : pestana === "reports" ? (
+  <PanelReportes
+    rango={rangoReporte}
+    onCambioRango={setRangoReporte}
+    onAbrirModal={() => setReporteAbierto(true)}
+    filas={filasReporte}
+    cargando={cargandoReporte}
+    error={errorReporte}
+  />
+) : pestana === "map" ? (
+  <MapaSensores cuadricula={cuadricula} />
+) : (
+  <PanelGraficas />
+)}
+
         </section>
 
         {/* ASIDE */}
@@ -424,12 +437,16 @@ function construirGridDesdeAPI(rows) {
           id: celdaBD.etiqueta || `S${celdaBD.id}`,
           lux: Number(celdaBD.lux),
           ts: new Date(celdaBD.ts),
+          fila: celdaBD.fila,
+          columna: celdaBD.columna,
         });
       } else {
         fila.push({
           id: `F${f}C${c}`,
           lux: 0,
           ts: new Date(),
+          fila: f,
+          columna: c,
         });
       }
     }
@@ -896,7 +913,10 @@ function PanelGraficas() {
       </div>
 
       {/* 📈 Gráfica grande general con los 9 sensores */}
-      <GraficaGeneral sensorIds={[1,2,3,4,5,6,7,8,9]} rangoHoras={rangoGeneral} />
+      <GraficaGeneral
+        sensorIds={[1, 2, 3, 4, 5, 6, 7, 8, 9]}
+        rangoHoras={rangoGeneral}
+      />
 
       {/* 👇 Tus gráficas individuales, tal cual estaban */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -913,8 +933,6 @@ function PanelGraficas() {
     </div>
   );
 }
-
-
 
 // ================== UTILIDAD: DESCARGAR CSV ==================
 

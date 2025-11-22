@@ -4,28 +4,107 @@ import pkg from "pg";
 import { z } from "zod";
 import { WebSocketServer } from "ws";
 
-// Pool de PostgreSQL
 const { Pool } = pkg;
 
-// Crear servidor Fastify
+// =======================
+// ⚡ MODO DEMO
+// =======================
+const DEMO_MODE = true; // ← CAMBIA A false CUANDO YA USES LA BD REAL
+const FILAS = 3;
+const COLUMNAS = 3;
+
+// Generar grid demo
+function generarHeatmapDemo() {
+  const rows = [];
+  let id = 1;
+
+  for (let f = 0; f < FILAS; f++) {
+    for (let c = 0; c < COLUMNAS; c++) {
+      const lux = 15000 + Math.random() * 15000;
+
+      rows.push({
+        id,
+        etiqueta: `S${id}`,
+        fila: f,
+        columna: c,
+        lux: Math.round(lux),
+        ts: new Date().toISOString(),
+      });
+
+      id++;
+    }
+  }
+
+  return rows;
+}
+
+// Series demo
+function generarSeriesDemo(sensorId) {
+  const puntos = [];
+  const ahora = Date.now();
+  const pasoMin = 10;
+  const totalMin = 6 * 60; // 6 horas
+
+  for (let min = totalMin; min >= 0; min -= pasoMin) {
+    const ts = new Date(ahora - min * 60000).toISOString();
+    const base = 15000 + Math.random() * 15000;
+    const offset = (sensorId - 5) * 1000;
+    const ruido = (Math.random() - 0.5) * 2000;
+
+    puntos.push({
+      ts,
+      lux: Math.max(0, Math.round(base + offset + ruido)),
+    });
+  }
+
+  return puntos;
+}
+
+// Reportes demo
+function generarReportesDemo(rango) {
+  const partes = rango === "day" ? 24 : rango === "week" ? 7 : 30;
+
+  return Array.from({ length: partes }).map((_, i) => {
+    const avg = 15000 + Math.random() * 15000;
+    const min = avg - (2000 + Math.random() * 2000);
+    const max = avg + (2000 + Math.random() * 2000);
+
+    return {
+      key: rango === "day" ? `${i.toString().padStart(2, "0")}:00` : `Per ${i + 1}`,
+      avg: Math.round(avg),
+      min: Math.round(Math.max(min, 0)),
+      max: Math.round(max),
+    };
+  });
+}
+
+// =======================
+// 🔥 Servidor Fastify
+// =======================
+
 const servidor = Fastify({ logger: true });
 
-// Habilitar CORS
 await servidor.register(cors, { origin: "*" });
 
-// Conexión a la base de datos
+// BD REAL (solo se usa cuando DEMO = false)
 const bd = new Pool({
   connectionString:
     process.env.DATABASE_URL ||
     "postgres://postgres:root@localhost:5432/mapeo_solar",
 });
 
-// Validación del rango (dia / semana / mes)
+// Validación del rango
 const esquemaRango = z.enum(["day", "week", "month"]);
 
-//  ENDPOINT HEATMAP
+// =======================
+// 🔥 ENDPOINT HEATMAP
+// =======================
 
 servidor.get("/api/heatmap", async (_req, _reply) => {
+  if (DEMO_MODE) {
+    return { grid: generarHeatmapDemo() };
+  }
+
   const { rows } = await bd.query(`
     SELECT s.id, s.etiqueta, s.fila, s.columna, r.lux, r.ts
     FROM sensores s
@@ -42,9 +121,17 @@ servidor.get("/api/heatmap", async (_req, _reply) => {
   return { grid: rows };
 });
 
-//  2) ENDPOINT TIEMPO
+// =======================
+// 🔥 ENDPOINT SERIES POR SENSOR
+// =======================
 
 servidor.get("/api/series", async (req, _reply) => {
+  const id = Number(req.query.sensorId || 1);
+
+  if (DEMO_MODE) {
+    return generarSeriesDemo(id);
+  }
+
   const { sensorId, from, to } = req.query;
 
   const consulta = `
@@ -60,13 +147,18 @@ servidor.get("/api/series", async (req, _reply) => {
   return rows;
 });
 
-//  ENDPOINT REPORTES
+// =======================
+// 🔥 ENDPOINT REPORTES
+// =======================
 
 servidor.get("/api/reports", async (req, _reply) => {
   const validado = esquemaRango.safeParse(req.query.range);
   const rango = validado.success ? validado.data : "day";
 
-  // Selección automática de la vista materializada
+  if (DEMO_MODE) {
+    return generarReportesDemo(rango);
+  }
+
   const vista =
     rango === "day"
       ? "lecturas_dia"
@@ -83,7 +175,6 @@ servidor.get("/api/reports", async (req, _reply) => {
     ORDER BY periodo ASC
   `);
 
-  // Convertimos a números
   return rows.map((r) => ({
     ...r,
     avg: Number(r.avg),
@@ -92,9 +183,15 @@ servidor.get("/api/reports", async (req, _reply) => {
   }));
 });
 
-//  4) ENDPOINT: INSERTAR LECTURAS DESDE ESP32
+// =======================
+// 🔥 ENDPOINT INSERTAR (ESP32)
+// =======================
 
 servidor.post("/api/lecturas", async (req, reply) => {
+  if (DEMO_MODE) {
+    return reply.send({ ok: true, id: 999 }); // solo éxito falso
+  }
+
   const { sensor_id, lux } = req.body || {};
 
   if (!sensor_id || lux === undefined || lux === null) {
@@ -113,30 +210,27 @@ servidor.post("/api/lecturas", async (req, reply) => {
     return { ok: true, id: rows[0].id };
   } catch (err) {
     servidor.log.error(err);
-    return reply
-      .code(500)
-      .send({ ok: false, error: "Error al insertar lectura" });
+    return reply.code(500).send({ ok: false, error: "Error al insertar lectura" });
   }
 });
 
-//  WEBSOCKET NO FUNCIONAL DEMO
+// =======================
+// 🔥 WEBSOCKET DEMO
+// =======================
 
 const wsServidor = new WebSocketServer({ noServer: true });
 
 servidor.server.on("upgrade", (req, socket, head) => {
   if (req.url === "/ws") {
     wsServidor.handleUpgrade(req, socket, head, (ws) => {
-      ws.send(
-        JSON.stringify({
-          tipo: "hola",
-          ts: new Date().toISOString(),
-        })
-      );
+      ws.send(JSON.stringify({ tipo: "hola", ts: new Date().toISOString() }));
     });
   }
 });
 
-// INICIAR SERVIDOR
+// =======================
+// 🔥 INICIAR
+// =======================
 
 const puerto = process.env.PORT || 3000;
 
