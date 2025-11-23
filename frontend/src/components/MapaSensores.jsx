@@ -1,12 +1,13 @@
 import React, { useMemo } from "react";
+import { MapContainer, TileLayer } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
 
 const FILAS = 3;
 const COLUMNAS = 3;
 const OBJETIVO_LUX = 20000;
 
 // Helpers
-const limitar = (valor, min, max) =>
-  Math.max(min, Math.min(max, valor));
+const limitar = (valor, min, max) => Math.max(min, Math.min(max, valor));
 
 const formatearLux = (valorLux) =>
   valorLux >= 1000
@@ -41,70 +42,85 @@ export default function MapaSensores({ cuadricula }) {
     (mejor, celda) => (celda.lux > mejor.lux ? celda : mejor),
     celdas[0]
   );
-  const umbralBajo = maxLux * 0.6; // <60% del máximo = poca luz
+  const umbralBajo = maxLux * 0.6;
   const sensoresBajos = celdas.filter((c) => c.lux < umbralBajo);
 
   return (
     <div className="space-y-4">
+
       <h2 className="text-lg font-medium">Mapa del invernadero</h2>
 
-      {/* “Mapa” simplificado con CSS grid (sin react-leaflet) */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-        <div className="text-xs text-slate-300 mb-2">
-          Distribución de sensores (vista superior del invernadero).
-        </div>
-        <div
-          className="relative w-full aspect-[4/3] rounded-2xl border border-slate-700 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 overflow-hidden"
-        >
-          <div
-            className="grid h-full w-full"
-            style={{
-              gridTemplateRows: `repeat(${FILAS}, 1fr)`,
-              gridTemplateColumns: `repeat(${COLUMNAS}, 1fr)`,
-              gap: "8px",
-              padding: "10px",
-            }}
-          >
-            {cuadricula.map((fila, fi) =>
-              fila.map((celda, ci) => {
-                const relMax = celda.lux / maxLux;
-                const color = colorMapaCalor(celda.lux / OBJETIVO_LUX);
+      {/* CONTENEDOR DEL MAPA + TU CUADRÍCULA */}
+      <div className="relative rounded-2xl border border-slate-800 bg-slate-900/60 p-4 overflow-hidden">
 
-                return (
+        <div className="text-xs text-slate-300 mb-2">
+          Luis gei
+        </div>
+
+        {/* MAPA DE FONDO (FIJO, SIN MOVERSE) */}
+        <div className="absolute inset-0 z-0 pointer-events-none opacity-25">
+          <MapContainer
+            center={[25.84022, -97.505206]}
+            zoom={20}
+            zoomControl={false}
+            scrollWheelZoom={false}
+            doubleClickZoom={false}
+            dragging={false}
+            style={{ width: "100%", height: "100%" }}
+          >
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          </MapContainer>
+        </div>
+
+        {/* TU GRID ENCIMA DEL MAPA */}
+        <div
+          className="relative z-10 grid h-full w-full"
+          style={{
+            gridTemplateRows: `repeat(${FILAS}, 1fr)`,
+            gridTemplateColumns: `repeat(${COLUMNAS}, 1fr)`,
+            gap: "8px",
+            padding: "10px",
+          }}
+        >
+          {cuadricula.map((fila) =>
+            fila.map((celda) => {
+              const relMax = celda.lux / maxLux;
+              const color = colorMapaCalor(celda.lux / OBJETIVO_LUX);
+
+              return (
+                <div
+                  key={celda.id}
+                  className="relative flex items-center justify-center rounded-xl backdrop-blur-sm"
+                  style={{
+                    background:
+                      "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.07), transparent 70%)",
+                    border: "1px solid rgba(148, 163, 184, 0.45)",
+                  }}
+                >
                   <div
-                    key={celda.id}
-                    className="relative flex items-center justify-center rounded-xl"
+                    className="flex flex-col items-center justify-center rounded-full shadow-md"
                     style={{
-                      background:
-                        "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.06), transparent 60%)",
-                      border: "1px solid rgba(148, 163, 184, 0.6)",
+                      backgroundColor: color,
+                      width: `${32 + relMax * 16}px`,
+                      height: `${32 + relMax * 16}px`,
+                      border: "2px solid rgba(15, 23, 42, 0.9)",
                     }}
                   >
-                    <div
-                      className="flex flex-col items-center justify-center rounded-full shadow-md"
-                      style={{
-                        backgroundColor: color,
-                        width: `${32 + relMax * 16}px`,
-                        height: `${32 + relMax * 16}px`,
-                        border: "2px solid rgba(15, 23, 42, 0.9)",
-                      }}
-                    >
-                      <span className="text-[10px] font-semibold text-slate-900">
-                        {celda.id}
-                      </span>
-                      <span className="text-[9px] text-slate-900/80">
-                        {formatearLux(celda.lux)}
-                      </span>
-                    </div>
+                    <span className="text-[10px] font-semibold text-slate-900">
+                      {celda.id}
+                    </span>
+                    <span className="text-[9px] text-slate-900/80">
+                      {formatearLux(celda.lux)}
+                    </span>
                   </div>
-                );
-              })
-            )}
-          </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
 
-      {/* Recomendaciones */}
+      {/* RECOMENDACIONES */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 text-sm text-slate-200 space-y-2">
         <h3 className="text-sm font-semibold mb-1">
           Recomendación de reubicación de plantas
@@ -113,20 +129,17 @@ export default function MapaSensores({ cuadricula }) {
         <p className="text-slate-300">
           El sensor con mayor luminosidad registrada es{" "}
           <strong>{sensorMax.id}</strong> con{" "}
-          <strong>{formatearLux(sensorMax.lux)}</strong>. Este punto se
-          considera la zona de referencia de mayor exposición solar.
+          <strong>{formatearLux(sensorMax.lux)}</strong>.
         </p>
 
         {sensoresBajos.length === 0 ? (
           <p className="text-emerald-300">
-            Todos los sensores están en un rango similar de iluminación. No se
-            recomienda reubicación por el momento.
+            Todos los sensores están en un rango similar de iluminación.
           </p>
         ) : (
           <>
             <p>
-              Los siguientes sensores presentan valores por debajo del 60% de
-              la luminosidad máxima del invernadero:
+              Sensores con menos del 60% de luz:
             </p>
             <ul className="list-disc list-inside text-slate-300">
               {sensoresBajos.map((c) => (
@@ -135,11 +148,6 @@ export default function MapaSensores({ cuadricula }) {
                 </li>
               ))}
             </ul>
-            <p className="mt-1 text-emerald-300">
-              Sugerencia: reubicar plantas de estos sensores hacia la zona
-              cercana a <strong>{sensorMax.id}</strong>, donde se registra la
-              mayor intensidad lumínica.
-            </p>
           </>
         )}
       </div>
