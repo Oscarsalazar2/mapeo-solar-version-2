@@ -938,6 +938,7 @@ function PanelGraficas() {
       />
 
       {/* Tus gráficas individuales, tal cual estaban */}
+      <h2 className="text-lg font-medium">Intensidad de cada sensor por hora</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <GraficaHoras sensorId={1} />
         <GraficaHoras sensorId={2} />

@@ -21,9 +21,7 @@ function colorMapaCalor(valorRel) {
     return `rgb(255,${Math.round(255 * t)},0)`; // rojo → amarillo
   }
   const t = (v - 0.5) / 1.5;
-  return `rgb(${Math.round(255 * (1 - t))},${Math.round(
-    255 - 85 * t
-  )},0)`; // amarillo → verde
+  return `rgb(${Math.round(255 * (1 - t))},${Math.round(255 - 85 * t)},0)`; // amarillo → verde
 }
 
 export default function MapaSensores({ cuadricula }) {
@@ -47,15 +45,11 @@ export default function MapaSensores({ cuadricula }) {
 
   return (
     <div className="space-y-4">
-
       <h2 className="text-lg font-medium">Mapa del invernadero</h2>
 
       {/* CONTENEDOR DEL MAPA + TU CUADRÍCULA */}
       <div className="relative rounded-2xl border border-slate-800 bg-slate-900/60 p-4 overflow-hidden">
-
-        <div className="text-xs text-slate-300 mb-2">
-          Luis gei
-        </div>
+        <div className="text-xs text-slate-300 mb-2">Luis gei</div>
 
         {/* MAPA DE FONDO (FIJO, SIN MOVERSE) */}
         <div className="absolute inset-0 z-0 pointer-events-none opacity-25">
@@ -138,9 +132,7 @@ export default function MapaSensores({ cuadricula }) {
           </p>
         ) : (
           <>
-            <p>
-              Sensores con menos del 60% de luz:
-            </p>
+            <p>Sensores con menos del 60% de luz:</p>
             <ul className="list-disc list-inside text-slate-300">
               {sensoresBajos.map((c) => (
                 <li key={c.id}>
@@ -148,6 +140,11 @@ export default function MapaSensores({ cuadricula }) {
                 </li>
               ))}
             </ul>
+            <p className="mt-1 text-emerald-300">
+              Sugerencia: reubicar plantas de estos sensores hacia la zona
+              cercana a <strong>{sensorMax.id}</strong>, donde se registra la
+              mayor intensidad lumínica.
+            </p>
           </>
         )}
       </div>

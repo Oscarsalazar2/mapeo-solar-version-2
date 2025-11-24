@@ -23,18 +23,17 @@ const API_BASE_URL = "http://localhost:3000";
 
 export default function GraficaHoras({ sensorId = 1 }) {
   const [datos, setDatos] = useState([]);
-  const [rangoHoras, setRangoHoras] = useState(1); // 6, 12, 24, etc.
+  const [rangoHoras, setRangoHoras] = useState(1);
   const [cargando, setCargando] = useState(false);
 
   async function cargar() {
     try {
       setCargando(true);
 
-      // Calculamos "from" = ahora - rangoHoras
       const ahora = new Date();
       const desde = new Date(
         ahora.getTime() - rangoHoras * 60 * 60 * 1000
-      ).toISOString(); // ISO para que Postgres lo entienda
+      ).toISOString();
 
       const url = `${API_BASE_URL}/api/series?sensorId=${sensorId}&from=${encodeURIComponent(
         desde
@@ -60,54 +59,79 @@ export default function GraficaHoras({ sensorId = 1 }) {
     cargar();
   }, [sensorId, rangoHoras]);
 
+  // ---- esto es del grafico no mover ----
   const labels = datos.map((d) =>
     new Date(d.ts).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     })
   );
+
   const valores = datos.map((d) => d.lux);
+
+  //quitamos los puntos inecesarios
+  const muchosPuntos = datos.length > 80;
 
   const data = {
     labels,
     datasets: [
       {
-        label: `Lux del sensor ${sensorId}`,
+        label: `Lux del sensor`,
         data: valores,
         borderColor: "rgb(16, 185, 129)",
         backgroundColor: "rgba(16, 185, 129, 0.3)",
         borderWidth: 2,
         tension: 0.3,
+        pointRadius: muchosPuntos ? 0 : 2,
+        pointHitRadius: 8,
       },
     ],
   };
 
-  const options = {
-    responsive: true,
-    plugins: {
-      legend: {
-        labels: { color: "#e5e7eb" },
-      },
-      tooltip: {
-        callbacks: {
-          label: (ctx) => ` ${ctx.parsed.y} lx`,
-        },
+const options = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      labels: { color: "#e5e7eb", boxWidth: 16, font: { size: 10 } },
+    },
+    tooltip: {
+      callbacks: {
+        label: (ctx) => ` ${ctx.parsed.y} lx`,
       },
     },
-    scales: {
-      x: {
-        ticks: { color: "#9ca3af" },
+  },
+  scales: {
+    x: {
+      ticks: {
+        color: "#9ca3af",
+        maxRotation: 0,
+        minRotation: 0,
+        autoSkip: true,
+        maxTicksLimit: 6,
       },
-      y: {
-        ticks: { color: "#9ca3af" },
+      grid: {
+        display: false,   //quita las líneas horizontales
       },
     },
-  };
+    y: {
+      ticks: {
+        color: "#9ca3af",
+        maxTicksLimit: 5,
+      },
+      grid: {
+        display: false,   // quita las líneas verticales
+      },
+    },
+  },
+};
+
 
   return (
+    
     <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-semibold">Intensidad por hora</h3>
+        <h3 className="text-sm font-semibold">Sensor {sensorId}</h3>
 
         {/* Selector de rango */}
         <div className="flex items-center gap-2 text-xs">
@@ -136,7 +160,9 @@ export default function GraficaHoras({ sensorId = 1 }) {
           Sin lecturas en las últimas {rangoHoras} horas.
         </div>
       ) : (
-        <Line data={data} options={options} />
+        <div className="mt-1 h-40 sm:h-48">
+          <Line data={data} options={options} />
+        </div>
       )}
     </div>
   );
