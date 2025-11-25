@@ -21,8 +21,7 @@ ChartJS.register(
 
 const API_BASE_URL = "http://localhost:3000";
 
-// 👇 AQUÍ CAMBIAS LOS MINUTOS DEL BLOQUE
-const INTERVALO_MINUTOS = 2; // 1, 2, 5, 10, etc.
+const INTERVALO_MINUTOS = 1; 
 
 const COLORES = [
   "rgba(16, 185, 129, 1)",   // verde
@@ -36,18 +35,14 @@ const COLORES = [
   "rgba(248, 113, 113, 1)",  // rojo suave
 ];
 
-// =========================
-// Agrupar lecturas cada N min
-// lecturas: [{ ts: Date, lux: number }]
-// =========================
+
 function agruparCadaNMin(lecturas, nMin) {
   const buckets = {};
 
   for (const d of lecturas) {
     const t = d.ts instanceof Date ? d.ts : new Date(d.ts);
     const minutos = t.getMinutes();
-    const bucketMin = minutos - (minutos % nMin); // bloque de nMin minutos
-
+    const bucketMin = minutos - (minutos % nMin); 
     const tsBucket = new Date(
       t.getFullYear(),
       t.getMonth(),
@@ -57,7 +52,7 @@ function agruparCadaNMin(lecturas, nMin) {
       0,
       0
     );
-    const clave = tsBucket.getTime(); // usamos el timestamp como clave
+    const clave = tsBucket.getTime(); 
 
     if (!buckets[clave]) {
       buckets[clave] = { ts: tsBucket, sum: 0, count: 0 };
@@ -68,7 +63,7 @@ function agruparCadaNMin(lecturas, nMin) {
 
   return Object.values(buckets)
     .map((b) => ({
-      ts: b.ts,               // 👈 siempre un Date
+      ts: b.ts,               
       lux: b.sum / b.count,
     }))
     .sort((a, b) => a.ts - b.ts);
@@ -115,7 +110,6 @@ export default function GraficaGeneral({
                 l.ts.getTime() >= limiteMs
             );
 
-          // AGRUPAMOS POR INTERVALO_MINUTOS
           const lecturasAgrupadas = agruparCadaNMin(
             lecturasOriginales,
             INTERVALO_MINUTOS
@@ -133,7 +127,6 @@ export default function GraficaGeneral({
     cargar();
   }, [sensorIds, rangoHoras]);
 
-  // Labels basados en la 1a serie
   const labels = useMemo(() => {
     const base = series[0]?.lecturas || [];
     return base.map((l) =>

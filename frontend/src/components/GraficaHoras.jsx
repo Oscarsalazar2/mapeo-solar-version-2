@@ -21,12 +21,11 @@ ChartJS.register(
 
 const API_BASE_URL = "http://localhost:3000";
 
-// 👇 CAMBIA SOLO ESTA LÍNEA
-const INTERVALO_MINUTOS = 1; // ← pon 1, 2, 5, 10, etc.
 
-// ==========================
+const INTERVALO_MINUTOS = 1; // Minutos
+
+
 // Agrupar lecturas cada N min
-// ==========================
 function agruparCadaNMin(datos, nMin) {
   const buckets = {};
 

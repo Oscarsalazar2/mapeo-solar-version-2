@@ -11,14 +11,14 @@ const FILAS = 3;
 const COLUMNAS = 3;
 
 // =======================
-// 🔥 Servidor Fastify
+// Servidor Fastify
 // =======================
 const servidor = Fastify({ logger: true });
 
 await servidor.register(cors, { origin: "*" });
 
 // =======================
-// 🔥 Conexión BD REAL
+// Conexión BD REAL
 // =======================
 const bd = new Pool({
   connectionString:
@@ -27,7 +27,7 @@ const bd = new Pool({
 });
 
 // =======================
-// 🔥 ENDPOINT SERIES POR SENSOR
+// ENDPOINT SERIES POR SENSOR
 // =======================
 servidor.get("/api/series", async (req, _reply) => {
   const sensorId = Number(req.query.sensorId || 1);
@@ -49,11 +49,9 @@ servidor.get("/api/series", async (req, _reply) => {
   return rows;
 });
 
+
 // =======================
-// 🔥 ENDPOINT HEATMAP
-// =======================
-// =======================
-// 🔥 ENDPOINT HEATMAP
+//  ENDPOINT HEATMAP
 // =======================
 servidor.get("/api/heatmap", async (req, _reply) => {
   if (DEMO_MODE) {
@@ -71,7 +69,7 @@ servidor.get("/api/heatmap", async (req, _reply) => {
         });
       }
     }
-    // 👇 IMPORTANTE: envolvemos en { grid: ... }
+    
     return { grid: demo };
   }
 
@@ -99,7 +97,7 @@ servidor.get("/api/heatmap", async (req, _reply) => {
 
 
 // =======================
-// 🔥 ENDPOINT REPORTES
+// ENDPOINT REPORTES
 // =======================
 servidor.get("/api/reports", async (req, _reply) => {
   const esquemaRango = z.enum(["day", "week", "month"]);
@@ -110,9 +108,8 @@ servidor.get("/api/reports", async (req, _reply) => {
 
   let consulta = "";
 
-  // ============
-  // 📌 DAY → 24 horas
-  // ============
+  //  dia → 24 horas
+
   if (rango === "day") {
     consulta = `
       WITH buckets AS (
@@ -142,9 +139,7 @@ servidor.get("/api/reports", async (req, _reply) => {
     `;
   }
 
-  // ============
-  // 📌 WEEK → 7 días
-  // ============
+  // Semana → 7 días
   else if (rango === "week") {
     consulta = `
       WITH buckets AS (
@@ -174,9 +169,9 @@ servidor.get("/api/reports", async (req, _reply) => {
     `;
   }
 
-  // ============
-  // 📌 MONTH → 30 días
-  // ============
+
+  // Mes → 30 días
+  
   else {
     consulta = `
       WITH buckets AS (
@@ -218,9 +213,8 @@ servidor.get("/api/reports", async (req, _reply) => {
 
 
 
-// =======================
-// 🔥 ENDPOINT BATCH DESDE ESP32
-// =======================
+// ENDPOINT BATCH DESDE ESP32
+
 servidor.post("/api/lecturas-multi", async (req, reply) => {
   const { lecturas } = req.body || {};
 
@@ -246,10 +240,9 @@ servidor.post("/api/lecturas-multi", async (req, reply) => {
   }
 });
 
-// =======================
-// 🔥 ENDPOINT: ÚLTIMAS 9 LECTURAS
-//     GET /api/lecturas/latest
-// =======================
+
+
+//     GET /api/lecturas/latest 
 servidor.get("/api/lecturas/latest", async (req, _reply) => {
   const consulta = `
     SELECT 
@@ -266,7 +259,6 @@ servidor.get("/api/lecturas/latest", async (req, _reply) => {
 
   const { rows } = await bd.query(consulta);
 
-  // Opcional: convertir lux a número por si viene como string
   return rows.map((r) => ({
     id: r.id,
     sensor_id: r.sensor_id,
@@ -277,9 +269,8 @@ servidor.get("/api/lecturas/latest", async (req, _reply) => {
 });
 
 
-// =======================
-// 🔥 WEBSOCKET (DEMO)
-// =======================
+//  WEBSOCKET (DEMO)
+
 const wsServidor = new WebSocketServer({ noServer: true });
 
 servidor.server.on("upgrade", (req, socket, head) => {
@@ -292,9 +283,8 @@ servidor.server.on("upgrade", (req, socket, head) => {
   }
 });
 
-// =======================
-// 🔥 INICIAR SERVIDOR
-// =======================
+
+// INICIAR SERVIDOR
 const puerto = process.env.PORT || 3000;
 
 servidor.listen({ port: puerto, host: "0.0.0.0" }).catch((err) => {
