@@ -1,0 +1,24 @@
+# ==== NO SUBIR ====
+
+# Dependencias
+node_modules/
+
+# Builds de Vite
+dist/
+build/
+
+# Archivos de entorno
+.env
+.env.local
+.env.*.local
+
+# Archivos del backend que no deben subirse
+server/node_modules/
+
+# Configs locales
+.vscode/
+.eslintcache
+
+# Mac / Windows basura
+.DS_Store
+Thumbs.db

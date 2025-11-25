@@ -21,6 +21,9 @@ ChartJS.register(
 
 const API_BASE_URL = "http://localhost:3000";
 
+// 👇 AQUÍ CAMBIAS LOS MINUTOS DEL BLOQUE
+const INTERVALO_MINUTOS = 2; // 1, 2, 5, 10, etc.
+
 const COLORES = [
   "rgba(16, 185, 129, 1)",   // verde
   "rgba(59, 130, 246, 1)",   // azul
@@ -33,7 +36,48 @@ const COLORES = [
   "rgba(248, 113, 113, 1)",  // rojo suave
 ];
 
-export default function GraficaGeneral({ sensorIds = [1,2,3,4,5,6,7,8,9], rangoHoras }) {
+// =========================
+// Agrupar lecturas cada N min
+// lecturas: [{ ts: Date, lux: number }]
+// =========================
+function agruparCadaNMin(lecturas, nMin) {
+  const buckets = {};
+
+  for (const d of lecturas) {
+    const t = d.ts instanceof Date ? d.ts : new Date(d.ts);
+    const minutos = t.getMinutes();
+    const bucketMin = minutos - (minutos % nMin); // bloque de nMin minutos
+
+    const tsBucket = new Date(
+      t.getFullYear(),
+      t.getMonth(),
+      t.getDate(),
+      t.getHours(),
+      bucketMin,
+      0,
+      0
+    );
+    const clave = tsBucket.getTime(); // usamos el timestamp como clave
+
+    if (!buckets[clave]) {
+      buckets[clave] = { ts: tsBucket, sum: 0, count: 0 };
+    }
+    buckets[clave].sum += d.lux;
+    buckets[clave].count++;
+  }
+
+  return Object.values(buckets)
+    .map((b) => ({
+      ts: b.ts,               // 👈 siempre un Date
+      lux: b.sum / b.count,
+    }))
+    .sort((a, b) => a.ts - b.ts);
+}
+
+export default function GraficaGeneral({
+  sensorIds = [1, 2, 3, 4, 5, 6, 7, 8, 9],
+  rangoHoras,
+}) {
   const [series, setSeries] = useState([]);
 
   useEffect(() => {
@@ -51,14 +95,33 @@ export default function GraficaGeneral({ sensorIds = [1,2,3,4,5,6,7,8,9], rangoH
         const limiteMs = ahoraMs - rangoHoras * 60 * 60 * 1000;
 
         const datosPorSensor = sensorIds.map((id, index) => {
-          const lecturas = jsons[index]
+          const raw = jsons[index];
+
+          if (!Array.isArray(raw)) {
+            console.warn(`Sensor ${id} regresó datos inválidos:`, raw);
+            return { sensorId: id, lecturas: [] };
+          }
+
+          // Convertimos ts a Date aquí
+          const lecturasOriginales = raw
             .map((l) => ({
               ts: new Date(l.ts),
               lux: Number(l.lux),
             }))
-            .filter((l) => l.ts.getTime() >= limiteMs);
+            .filter(
+              (l) =>
+                l.ts instanceof Date &&
+                !isNaN(l.ts) &&
+                l.ts.getTime() >= limiteMs
+            );
 
-          return { sensorId: id, lecturas };
+          // AGRUPAMOS POR INTERVALO_MINUTOS
+          const lecturasAgrupadas = agruparCadaNMin(
+            lecturasOriginales,
+            INTERVALO_MINUTOS
+          );
+
+          return { sensorId: id, lecturas: lecturasAgrupadas };
         });
 
         setSeries(datosPorSensor);
@@ -70,6 +133,7 @@ export default function GraficaGeneral({ sensorIds = [1,2,3,4,5,6,7,8,9], rangoH
     cargar();
   }, [sensorIds, rangoHoras]);
 
+  // Labels basados en la 1a serie
   const labels = useMemo(() => {
     const base = series[0]?.lecturas || [];
     return base.map((l) =>
@@ -84,7 +148,10 @@ export default function GraficaGeneral({ sensorIds = [1,2,3,4,5,6,7,8,9], rangoH
         label: `Sensor ${serie.sensorId}`,
         data: serie.lecturas.map((l) => l.lux),
         borderColor: COLORES[idx % COLORES.length],
-        backgroundColor: COLORES[idx % COLORES.length].replace(", 1)", ", 0.25)"),
+        backgroundColor: COLORES[idx % COLORES.length].replace(
+          ", 1)",
+          ", 0.25)"
+        ),
         borderWidth: 2,
         tension: 0.3,
         pointRadius: 2,
@@ -92,13 +159,47 @@ export default function GraficaGeneral({ sensorIds = [1,2,3,4,5,6,7,8,9], rangoH
     };
   }, [labels, series]);
 
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        labels: { color: "#e5e7eb", boxWidth: 16, font: { size: 10 } },
+      },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => ` ${ctx.parsed.y} lx`,
+        },
+      },
+    },
+    scales: {
+      x: {
+        ticks: {
+          color: "#9ca3af",
+          autoSkip: true,
+          maxTicksLimit: 8,
+        },
+        grid: { display: false },
+      },
+      y: {
+        ticks: {
+          color: "#9ca3af",
+          maxTicksLimit: 6,
+        },
+        grid: { display: false },
+      },
+    },
+  };
+
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
       <h3 className="text-sm font-semibold mb-2">
         Intensidad por hora general
       </h3>
       {labels.length ? (
-        <Line data={data} />
+        <div className="h-56 sm:h-64">
+          <Line data={data} options={options} />
+        </div>
       ) : (
         <div className="text-xs text-slate-300">
           Sin lecturas en el rango seleccionado.

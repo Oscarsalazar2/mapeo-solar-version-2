@@ -21,6 +21,45 @@ ChartJS.register(
 
 const API_BASE_URL = "http://localhost:3000";
 
+// 👇 CAMBIA SOLO ESTA LÍNEA
+const INTERVALO_MINUTOS = 1; // ← pon 1, 2, 5, 10, etc.
+
+// ==========================
+// Agrupar lecturas cada N min
+// ==========================
+function agruparCadaNMin(datos, nMin) {
+  const buckets = {};
+
+  for (const d of datos) {
+    const t = new Date(d.ts);
+    const minutos = t.getMinutes();
+    const bucketMin = minutos - (minutos % nMin); // 👈 AGRUPA EN BLOQUES
+
+    const clave = new Date(
+      t.getFullYear(),
+      t.getMonth(),
+      t.getDate(),
+      t.getHours(),
+      bucketMin,
+      0,
+      0
+    ).toISOString();
+
+    if (!buckets[clave]) {
+      buckets[clave] = { ts: clave, sum: 0, count: 0 };
+    }
+    buckets[clave].sum += d.lux;
+    buckets[clave].count++;
+  }
+
+  return Object.values(buckets)
+    .map((b) => ({
+      ts: b.ts,
+      lux: b.sum / b.count,
+    }))
+    .sort((a, b) => new Date(a.ts) - new Date(b.ts));
+}
+
 export default function GraficaHoras({ sensorId = 1 }) {
   const [datos, setDatos] = useState([]);
   const [rangoHoras, setRangoHoras] = useState(1);
@@ -35,19 +74,20 @@ export default function GraficaHoras({ sensorId = 1 }) {
         ahora.getTime() - rangoHoras * 60 * 60 * 1000
       ).toISOString();
 
-      const url = `${API_BASE_URL}/api/series?sensorId=${sensorId}&from=${encodeURIComponent(
-        desde
-      )}`;
+      const res = await fetch(
+        `${API_BASE_URL}/api/series?sensorId=${sensorId}&from=${encodeURIComponent(
+          desde
+        )}`
+      );
 
-      const res = await fetch(url);
       if (!res.ok) {
         console.error("Error al cargar /api/series", res.status);
         setDatos([]);
         return;
       }
 
-      const d = await res.json();
-      setDatos(d);
+      const json = await res.json();
+      setDatos(json);
     } catch (e) {
       console.error("Error al cargar /api/series", e);
     } finally {
@@ -59,18 +99,21 @@ export default function GraficaHoras({ sensorId = 1 }) {
     cargar();
   }, [sensorId, rangoHoras]);
 
-  // ---- esto es del grafico no mover ----
-  const labels = datos.map((d) =>
+  // ==========================
+  // AGRUPAR DATOS
+  // ==========================
+  const datosAgrupados = agruparCadaNMin(datos, INTERVALO_MINUTOS);
+
+  const labels = datosAgrupados.map((d) =>
     new Date(d.ts).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     })
   );
 
-  const valores = datos.map((d) => d.lux);
+  const valores = datosAgrupados.map((d) => d.lux);
 
-  //quitamos los puntos inecesarios
-  const muchosPuntos = datos.length > 80;
+  const muchosPuntos = datosAgrupados.length > 80;
 
   const data = {
     labels,
@@ -83,57 +126,47 @@ export default function GraficaHoras({ sensorId = 1 }) {
         borderWidth: 2,
         tension: 0.3,
         pointRadius: muchosPuntos ? 0 : 2,
-        pointHitRadius: 8,
       },
     ],
   };
 
-const options = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      labels: { color: "#e5e7eb", boxWidth: 16, font: { size: 10 } },
-    },
-    tooltip: {
-      callbacks: {
-        label: (ctx) => ` ${ctx.parsed.y} lx`,
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        labels: { color: "#e5e7eb", boxWidth: 16, font: { size: 10 } },
+      },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => ` ${ctx.parsed.y} lx`,
+        },
       },
     },
-  },
-  scales: {
-    x: {
-      ticks: {
-        color: "#9ca3af",
-        maxRotation: 0,
-        minRotation: 0,
-        autoSkip: true,
-        maxTicksLimit: 6,
+    scales: {
+      x: {
+        ticks: {
+          color: "#9ca3af",
+          autoSkip: true,
+          maxTicksLimit: 6,
+        },
+        grid: { display: false },
       },
-      grid: {
-        display: false,   //quita las líneas horizontales
-      },
-    },
-    y: {
-      ticks: {
-        color: "#9ca3af",
-        maxTicksLimit: 5,
-      },
-      grid: {
-        display: false,   // quita las líneas verticales
+      y: {
+        ticks: {
+          color: "#9ca3af",
+          maxTicksLimit: 5,
+        },
+        grid: { display: false },
       },
     },
-  },
-};
-
+  };
 
   return (
-    
     <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-semibold">Sensor {sensorId}</h3>
 
-        {/* Selector de rango */}
         <div className="flex items-center gap-2 text-xs">
           <span className="text-slate-300">Rango:</span>
           <select
@@ -150,12 +183,10 @@ const options = {
       </div>
 
       {cargando && (
-        <div className="text-xs text-slate-400 mb-2">
-          Cargando datos…
-        </div>
+        <div className="text-xs text-slate-400 mb-2">Cargando datos…</div>
       )}
 
-      {datos.length === 0 ? (
+      {datosAgrupados.length === 0 ? (
         <div className="text-xs text-slate-400">
           Sin lecturas en las últimas {rangoHoras} horas.
         </div>

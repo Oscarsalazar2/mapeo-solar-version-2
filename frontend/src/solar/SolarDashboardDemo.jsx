@@ -4,12 +4,13 @@ import GraficaGeneral from "../components/GraficaGeneral";
 import MapaSensores from "../components/MapaSensores";
 
 // De dónde llama la API (backend Fastify)
+//const API_BASE_URL = "http://192.168.1.150:3000";
 const API_BASE_URL = "http://localhost:3000";
 
 
 
 // CONSTANTES
-const OBJETIVO_LUX = 20000;
+const OBJETIVO_LUX = 500;
 const FILAS = 3;
 const COLUMNAS = 3;
 const INTERVALO_ACTUALIZACION = 1000;
