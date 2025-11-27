@@ -17,11 +17,11 @@ BH1750 s7A(0x23);   // Canal 7 – sensor A
 BH1750 s7B(0x5C);   // Canal 7 – sensor B
 
 // === WiFi y servidor ===
-const char* ssid     = "INFINITUM42AC";
-const char* password = "dDPF37jCDK";
+const char* ssid     = "S22 de Mario";
+const char* password = "vjgw3101";
 
 // ⚠️ IP de tu LAPTOP donde corre Fastify
-const char* serverUrl = "http://192.168.1.150:3000/api/lecturas-multi";
+const char* serverUrl = "http://10.226.92.104:3000/api/lecturas-multi";
 
 // ==========================
 // Seleccionar canal del TCA

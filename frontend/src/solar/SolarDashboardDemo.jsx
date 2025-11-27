@@ -10,7 +10,7 @@ const API_BASE_URL = "http://localhost:3000";
 
 
 // CONSTANTES
-const OBJETIVO_LUX = 500;
+const OBJETIVO_LUX = 2000;
 const FILAS = 3;
 const COLUMNAS = 3;
 const INTERVALO_ACTUALIZACION = 1000;
@@ -151,7 +151,7 @@ export default function SolarDashboardDemo() {
   return (
     <div className="min-h-screen w-full bg-slate-950 text-slate-100">
       {/* HEADER */}
-      <header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/80 backdrop-blur">
+      <header className="sticky top-0 z-[2000] border-b border-slate-800 bg-slate-950/80 backdrop-blur">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <h1 className="text-xl sm:text-2xl font-semibold">Mapeo Solar</h1>
           <button
@@ -517,6 +517,8 @@ function IndicadorKPI({ etiqueta, valor, subtitulo, advertencia }) {
 }
 
 function ListaAlertas({ cuadricula }) {
+  const [mostrarTodo, setMostrarTodo] = useState(false);
+
   const alertas = cuadricula
     .flat()
     .filter((celda) => celda.lux < OBJETIVO_LUX * 0.5);
@@ -525,26 +527,48 @@ function ListaAlertas({ cuadricula }) {
     return <div className="mt-2 text-xs text-emerald-300">Sin alertas</div>;
   }
 
+  const LIMITE = 5;
+  const alertasVisibles = mostrarTodo ? alertas : alertas.slice(0, LIMITE);
+  const restantes = alertas.length - LIMITE;
+
   return (
-    <ul className="mt-2 space-y-2">
-      {alertas.slice(0, 5).map((celda) => (
-        <li
-          key={celda.id}
-          className="text-xs bg-rose-900/30 border border-rose-800/50 rounded-xl px-3 py-2"
+    <>
+      <ul className="mt-2 space-y-2">
+        {alertasVisibles.map((celda) => (
+          <li
+            key={celda.id}
+            className="text-xs bg-rose-900/30 border border-rose-800/50 rounded-xl px-3 py-2"
+          >
+            <span className="font-semibold">{celda.id}</span> bajo (
+            {formatearLux(celda.lux)}) —{" "}
+            {Math.round((celda.lux / OBJETIVO_LUX) * 100)}% del objetivo
+          </li>
+        ))}
+      </ul>
+
+      {/* +X más… */}
+      {!mostrarTodo && restantes > 0 && (
+        <button
+          onClick={() => setMostrarTodo(true)}
+          className="mt-2 text-[11px] text-slate-400 hover:text-slate-200"
         >
-          <span className="font-semibold">{celda.id}</span> bajo (
-          {formatearLux(celda.lux)}) —{" "}
-          {Math.round((celda.lux / OBJETIVO_LUX) * 100)}% del objetivo
-        </li>
-      ))}
-      {alertas.length > 5 && (
-        <li className="text-[11px] text-slate-400">
-          +{alertas.length - 5} más…
-        </li>
+          +{restantes} más…
+        </button>
       )}
-    </ul>
+
+      {/* Mostrar menos */}
+      {mostrarTodo && alertas.length > LIMITE && (
+        <button
+          onClick={() => setMostrarTodo(false)}
+          className="mt-2 text-[11px] text-slate-400 hover:text-slate-200"
+        >
+          Mostrar menos
+        </button>
+      )}
+    </>
   );
 }
+
 
 // ========== PANEL CLIMA ==========
 

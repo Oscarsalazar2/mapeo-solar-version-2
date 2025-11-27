@@ -4,7 +4,7 @@ import "leaflet/dist/leaflet.css";
 
 const FILAS = 3;
 const COLUMNAS = 3;
-const OBJETIVO_LUX = 500;
+const OBJETIVO_LUX = 2000;
 
 // Helpers
 const limitar = (valor, min, max) => Math.max(min, Math.min(max, valor));
@@ -49,12 +49,12 @@ export default function MapaSensores({ cuadricula }) {
 
       {/* CONTENEDOR DEL MAPA + TU CUADRÍCULA */}
       <div className="relative rounded-2xl border border-slate-800 bg-slate-900/60 p-4 overflow-hidden">
-        <div className="text-xs text-slate-300 mb-2">Luis gei</div>
+        <div className="text-xs text-slate-300 mb-2"></div>
 
         {/* MAPA DE FONDO (FIJO, SIN MOVERSE) */}
         <div className="absolute inset-0 z-0 pointer-events-none opacity-25">
           <MapContainer
-            center={[25.84022, -97.505206]}
+            center={[25.842530021542174, -97.45428453449877]}
             zoom={20}
             zoomControl={false}
             scrollWheelZoom={false}
