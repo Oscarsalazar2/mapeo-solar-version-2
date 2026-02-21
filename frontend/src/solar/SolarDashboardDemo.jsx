@@ -10,7 +10,7 @@ const API_BASE_URL = "http://localhost:3000";
 
 
 // CONSTANTES
-const OBJETIVO_LUX = 2000;
+const OBJETIVO_LUX = 500;
 const FILAS = 3;
 const COLUMNAS = 3;
 const INTERVALO_ACTUALIZACION = 1000;
@@ -840,94 +840,95 @@ function ModalReporte({ onCerrar, rango, filas }) {
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      {/* Contenedor del modal */}
-      <div className="w-full max-w-4xl max-h-[85vh] rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="px-5 py-3 border-b border-slate-800 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-slate-100">
-            Reporte por{" "}
-            {rango === "day" ? "día" : rango === "week" ? "semana" : "mes"}
-          </h3>
-          <button
-            onClick={onCerrar}
-            className="text-xs px-2 py-1 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800"
-          >
-            Cerrar
-          </button>
-        </div>
+    <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+  {/* Contenedor del modal */}
+  <div className="w-full max-w-4xl max-h-[85vh] rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl flex flex-col overflow-hidden">
+    {/* Header */}
+    <div className="px-5 py-3 border-b border-slate-800 flex items-center justify-between">
+      <h3 className="text-sm font-semibold text-slate-100">
+        Reporte por{" "}
+        {rango === "day" ? "día" : rango === "week" ? "semana" : "mes"}
+      </h3>
+      <button
+        onClick={onCerrar}
+        className="text-xs px-2 py-1 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800"
+      >
+        Cerrar
+      </button>
+    </div>
 
-        {/* Cuerpo del modal */}
-        <div className="px-5 pt-4 pb-3 space-y-4 flex-1 flex flex-col overflow-hidden">
-          {/* Indicadores arriba */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <IndicadorKPI
-              etiqueta="Promedio"
-              valor={formatearLux(indicadores.avg)}
-            />
-            <IndicadorKPI
-              etiqueta="Máximo"
-              valor={formatearLux(indicadores.max)}
-            />
-            <IndicadorKPI
-              etiqueta="Mínimo"
-              valor={formatearLux(indicadores.min)}
-            />
-          </div>
+    {/* Cuerpo del modal */}
+    <div className="px-5 pt-4 pb-3 space-y-4 flex-1 flex flex-col overflow-hidden">
+      {/* Indicadores arriba */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <IndicadorKPI
+          etiqueta="Promedio"
+          valor={formatearLux(indicadores.avg)}
+        />
+        <IndicadorKPI
+          etiqueta="Máximo"
+          valor={formatearLux(indicadores.max)}
+        />
+        <IndicadorKPI
+          etiqueta="Mínimo"
+          valor={formatearLux(indicadores.min)}
+        />
+      </div>
 
-          {/* Tabla scrollable */}
-          <div className="flex-1 min-h-0 rounded-xl border border-slate-800 bg-slate-900/40 overflow-x-auto overflow-y-auto">
-            <table className="min-w-full text-xs sm:text-sm">
-              <thead className="sticky top-0 z-10 bg-slate-900">
-                <tr className="text-left text-slate-300">
-                  <th className="py-2 px-3 font-medium">Periodo</th>
-                  <th className="py-2 px-3 font-medium">Lux promedio</th>
-                  <th className="py-2 px-3 font-medium">Lux máx</th>
-                  <th className="py-2 px-3 font-medium">Lux mín</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filas.map((fila) => (
-                  <tr
-                    key={fila.key}
-                    className="border-t border-slate-800 hover:bg-slate-800/50"
-                  >
-                    <td className="py-1.5 px-3 text-slate-200">{fila.key}</td>
-                    <td className="py-1.5 px-3 text-slate-200">
-                      {Math.round(fila.avg)}
-                    </td>
-                    <td className="py-1.5 px-3 text-slate-200">
-                      {Math.round(fila.max)}
-                    </td>
-                    <td className="py-1.5 px-3 text-slate-200">
-                      {Math.round(fila.min)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      {/* Tabla scrollable */}
+      <div className="flex-1 min-h-0 rounded-xl border border-slate-800 bg-slate-900/40 overflow-x-auto overflow-y-auto">
+        <table className="min-w-full text-xs sm:text-sm">
+          <thead className="sticky top-0 z-10 bg-slate-900">
+            <tr className="text-left text-slate-300">
+              <th className="py-2 px-3 font-medium">Periodo</th>
+              <th className="py-2 px-3 font-medium">Lux promedio</th>
+              <th className="py-2 px-3 font-medium">Lux máx</th>
+              <th className="py-2 px-3 font-medium">Lux mín</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filas.map((fila) => (
+              <tr
+                key={fila.key}
+                className="border-t border-slate-800 hover:bg-slate-800/50"
+              >
+                <td className="py-1.5 px-3 text-slate-200">{fila.key}</td>
+                <td className="py-1.5 px-3 text-slate-200">
+                  {Math.round(fila.avg)}
+                </td>
+                <td className="py-1.5 px-3 text-slate-200">
+                  {Math.round(fila.max)}
+                </td>
+                <td className="py-1.5 px-3 text-slate-200">
+                  {Math.round(fila.min)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-          {/* Botones abajo */}
-          <div className="pt-3 mt-1 border-t border-slate-800 flex flex-wrap justify-end gap-2">
-            <button
-              onClick={() =>
-                downloadCSV(filas, `reporte_detallado_${rango}.csv`)
-              }
-              className="px-3 py-1.5 rounded-xl text-xs sm:text-sm border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-100"
-            >
-              Descargar CSV
-            </button>
-            <button
-              onClick={onCerrar}
-              className="px-3 py-1.5 rounded-xl text-xs sm:text-sm border border-slate-700 hover:bg-slate-800 text-slate-100"
-            >
-              Cerrar
-            </button>
-          </div>
-        </div>
+      {/* Botones abajo */}
+      <div className="pt-3 mt-1 border-t border-slate-800 flex flex-wrap justify-end gap-2">
+        <button
+          onClick={() =>
+            downloadCSV(filas, `reporte_detallado_${rango}.csv`)
+          }
+          className="px-3 py-1.5 rounded-xl text-xs sm:text-sm border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-100"
+        >
+          Descargar CSV
+        </button>
+        <button
+          onClick={onCerrar}
+          className="px-3 py-1.5 rounded-xl text-xs sm:text-sm border border-slate-700 hover:bg-slate-800 text-slate-100"
+        >
+          Cerrar
+        </button>
       </div>
     </div>
+  </div>
+</div>
+
   );
 }
 

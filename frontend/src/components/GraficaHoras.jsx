@@ -32,7 +32,7 @@ function agruparCadaNMin(datos, nMin) {
   for (const d of datos) {
     const t = new Date(d.ts);
     const minutos = t.getMinutes();
-    const bucketMin = minutos - (minutos % nMin); // 👈 AGRUPA EN BLOQUES
+    const bucketMin = minutos - (minutos % nMin); //  AGRUPA EN BLOQUES
 
     const clave = new Date(
       t.getFullYear(),
@@ -98,9 +98,7 @@ export default function GraficaHoras({ sensorId = 1 }) {
     cargar();
   }, [sensorId, rangoHoras]);
 
-  // ==========================
   // AGRUPAR DATOS
-  // ==========================
   const datosAgrupados = agruparCadaNMin(datos, INTERVALO_MINUTOS);
 
   const labels = datosAgrupados.map((d) =>

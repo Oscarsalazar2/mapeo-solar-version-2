@@ -10,25 +10,19 @@ const DEMO_MODE = false;
 const FILAS = 3;
 const COLUMNAS = 3;
 
-// =======================
 // Servidor Fastify
-// =======================
 const servidor = Fastify({ logger: true });
 
 await servidor.register(cors, { origin: "*" });
 
-// =======================
 // Conexión BD REAL
-// =======================
 const bd = new Pool({
   connectionString:
     process.env.DATABASE_URL ||
     "postgres://postgres:root@localhost:5432/mapeo_solar",
 });
 
-// =======================
 // ENDPOINT SERIES POR SENSOR
-// =======================
 servidor.get("/api/series", async (req, _reply) => {
   const sensorId = Number(req.query.sensorId || 1);
   const from = req.query.from || null;
@@ -50,9 +44,7 @@ servidor.get("/api/series", async (req, _reply) => {
 });
 
 
-// =======================
 //  ENDPOINT HEATMAP
-// =======================
 servidor.get("/api/heatmap", async (req, _reply) => {
   if (DEMO_MODE) {
     const demo = [];
@@ -96,9 +88,8 @@ servidor.get("/api/heatmap", async (req, _reply) => {
 });
 
 
-// =======================
+
 // ENDPOINT REPORTES
-// =======================
 servidor.get("/api/reports", async (req, _reply) => {
   const esquemaRango = z.enum(["day", "week", "month"]);
   const validado = esquemaRango.safeParse(req.query.range);
@@ -108,14 +99,14 @@ servidor.get("/api/reports", async (req, _reply) => {
 
   let consulta = "";
 
-  //  dia → 24 horas
 
+  // DÍA → 00:00 a 23:00 de HOY
   if (rango === "day") {
     consulta = `
       WITH buckets AS (
         SELECT generate_series(
-          date_trunc('hour', now() - interval '23 hour'),
-          date_trunc('hour', now()),
+          date_trunc('day', now()),                      -- 00:00 de hoy
+          date_trunc('day', now()) + interval '23 hour', -- 23:00 de hoy
           interval '1 hour'
         ) AS slot
       ),
@@ -125,7 +116,8 @@ servidor.get("/api/reports", async (req, _reply) => {
                MAX(lux) AS max,
                MIN(lux) AS min
         FROM lecturas
-        WHERE ts >= now() - interval '24 hours'
+        WHERE ts >= date_trunc('day', now())
+          AND ts <  date_trunc('day', now()) + interval '1 day'
         GROUP BY 1
       )
       SELECT 
@@ -139,13 +131,13 @@ servidor.get("/api/reports", async (req, _reply) => {
     `;
   }
 
-  // Semana → 7 días
+  // SEMANA (hoy y 6 días antes)
   else if (rango === "week") {
     consulta = `
       WITH buckets AS (
         SELECT generate_series(
-          date_trunc('day', now() - interval '6 day'),
-          date_trunc('day', now()),
+          date_trunc('day', now() - interval '6 day'),  -- hace 6 días
+          date_trunc('day', now()),                     -- hoy
           interval '1 day'
         ) AS slot
       ),
@@ -155,7 +147,8 @@ servidor.get("/api/reports", async (req, _reply) => {
                MAX(lux) AS max,
                MIN(lux) AS min
         FROM lecturas
-        WHERE ts >= now() - interval '7 day'
+        WHERE ts >= date_trunc('day', now() - interval '6 day')
+          AND ts <  date_trunc('day', now()) + interval '1 day'
         GROUP BY 1
       )
       SELECT 
@@ -169,15 +162,13 @@ servidor.get("/api/reports", async (req, _reply) => {
     `;
   }
 
-
-  // Mes → 30 días
-  
+  // MES → últimos 30 días (hoy y 29 días antes)
   else {
     consulta = `
       WITH buckets AS (
         SELECT generate_series(
-          date_trunc('day', now() - interval '29 day'),
-          date_trunc('day', now()),
+          date_trunc('day', now() - interval '29 day'), -- hace 29 días
+          date_trunc('day', now()),                     -- hoy
           interval '1 day'
         ) AS slot
       ),
@@ -187,7 +178,8 @@ servidor.get("/api/reports", async (req, _reply) => {
                MAX(lux) AS max,
                MIN(lux) AS min
         FROM lecturas
-        WHERE ts >= now() - interval '30 day'
+        WHERE ts >= date_trunc('day', now() - interval '29 day')
+          AND ts <  date_trunc('day', now()) + interval '1 day'
         GROUP BY 1
       )
       SELECT 
@@ -210,6 +202,7 @@ servidor.get("/api/reports", async (req, _reply) => {
     min: Number(r.min),
   }));
 });
+
 
 
 

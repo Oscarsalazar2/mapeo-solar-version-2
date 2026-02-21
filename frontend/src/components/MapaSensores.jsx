@@ -4,9 +4,9 @@ import "leaflet/dist/leaflet.css";
 
 const FILAS = 3;
 const COLUMNAS = 3;
-const OBJETIVO_LUX = 2000;
+const OBJETIVO_LUX = 500;
 
-// Helpers
+ 
 const limitar = (valor, min, max) => Math.max(min, Math.min(max, valor));
 
 const formatearLux = (valorLux) =>
