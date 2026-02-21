@@ -2,12 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import GraficaHoras from "../components/GraficaHoras";
 import GraficaGeneral from "../components/GraficaGeneral";
 import MapaSensores from "../components/MapaSensores";
-
-// De dónde llama la API (backend Fastify)
-//const API_BASE_URL = "http://192.168.1.150:3000";
-const API_BASE_URL = "http://localhost:3000";
-
-
+import { API_BASE_URL } from "../config/api";
+import { fetchJson } from "../lib/http";
+import useDebouncedValue from "../hooks/useDebouncedValue";
 
 // CONSTANTES
 const OBJETIVO_LUX = 500;
@@ -53,25 +50,41 @@ export default function SolarDashboardDemo() {
   const [filasReporte, setFilasReporte] = useState([]);
   const [cargandoReporte, setCargandoReporte] = useState(false);
   const [errorReporte, setErrorReporte] = useState("");
+  const rangoReporteDebounced = useDebouncedValue(rangoReporte, 220);
 
   const referenciaTemporizador = useRef(null);
 
   // ====== Cargar datos del mapa de calor desde /api/heatmap ======
   useEffect(() => {
     if (!enEjecucion) return;
+    let peticionActual = null;
 
     async function cargarHeatmap() {
+      if (peticionActual) {
+        peticionActual.abort();
+      }
+
+      const controller = new AbortController();
+      peticionActual = controller;
+
       try {
-        const res = await fetch(`${API_BASE_URL}/api/heatmap`);
-        if (!res.ok) {
-          console.error("Error al pedir /api/heatmap", res.status);
-          return;
-        }
-        const data = await res.json();
+        const data = await fetchJson(`${API_BASE_URL}/api/heatmap`, {
+          timeoutMs: 3000,
+          retries: 1,
+          signal: controller.signal,
+        });
         const grid = construirGridDesdeAPI(data.grid);
-        setCuadricula(grid);
+        if (!controller.signal.aborted) {
+          setCuadricula(grid);
+        }
       } catch (err) {
-        console.error("Error de red al pedir /api/heatmap", err);
+        if (err?.name !== "AbortError") {
+          console.error("Error de red al pedir /api/heatmap", err);
+        }
+      } finally {
+        if (peticionActual === controller) {
+          peticionActual = null;
+        }
       }
     }
 
@@ -81,42 +94,58 @@ export default function SolarDashboardDemo() {
     // Actualizar cada segundo
     referenciaTemporizador.current = setInterval(
       cargarHeatmap,
-      INTERVALO_ACTUALIZACION
+      INTERVALO_ACTUALIZACION,
     );
 
     return () => {
       if (referenciaTemporizador.current) {
         clearInterval(referenciaTemporizador.current);
       }
+      if (peticionActual) {
+        peticionActual.abort();
+      }
     };
   }, [enEjecucion]);
 
   // ====== Cargar reportes desde /api/reports ======
   useEffect(() => {
+    const controller = new AbortController();
+
     async function cargarReportes() {
       try {
         setCargandoReporte(true);
         setErrorReporte("");
 
-        const res = await fetch(
-          `${API_BASE_URL}/api/reports?range=${rangoReporte}`
-        );
-        if (!res.ok) {
-          throw new Error(`Error al cargar reportes (${res.status})`);
+        const data = await fetchJson(
+          `${API_BASE_URL}/api/reports?range=${rangoReporteDebounced}`,
+          {
+            timeoutMs: 5000,
+            retries: 2,
+            cacheTtlMs: 15000,
+            signal: controller.signal,
+          },
+        ); // [{ key, avg, max, min }]
+        if (!controller.signal.aborted) {
+          setFilasReporte(data);
         }
-
-        const data = await res.json(); // [{ key, avg, max, min }]
-        setFilasReporte(data);
       } catch (err) {
-        console.error("Error cargando /api/reports", err);
-        setErrorReporte(err.message || "Error al cargar reportes");
+        if (err?.name !== "AbortError") {
+          console.error("Error cargando /api/reports", err);
+          setErrorReporte(err.message || "Error al cargar reportes");
+        }
       } finally {
-        setCargandoReporte(false);
+        if (!controller.signal.aborted) {
+          setCargandoReporte(false);
+        }
       }
     }
 
     cargarReportes();
-  }, [rangoReporte]);
+
+    return () => {
+      controller.abort();
+    };
+  }, [rangoReporteDebounced]);
 
   // ====== Estadísticas globales del grid ======
   const celdasPlanas = useMemo(() => cuadricula.flat(), [cuadricula]);
@@ -205,24 +234,23 @@ export default function SolarDashboardDemo() {
       <main className="max-w-6xl mx-auto px-4 py-6 grid gap-6 lg:grid-cols-[1fr_320px]">
         <section className="space-y-4">
           {pestana === "weather" ? (
-  <PanelClima />
-) : pestana === "sensors" ? (
-  <PanelSensores cuadricula={cuadricula} />
-) : pestana === "reports" ? (
-  <PanelReportes
-    rango={rangoReporte}
-    onCambioRango={setRangoReporte}
-    onAbrirModal={() => setReporteAbierto(true)}
-    filas={filasReporte}
-    cargando={cargandoReporte}
-    error={errorReporte}
-  />
-) : pestana === "map" ? (
-  <MapaSensores cuadricula={cuadricula} />
-) : (
-  <PanelGraficas />
-)}
-
+            <PanelClima />
+          ) : pestana === "sensors" ? (
+            <PanelSensores cuadricula={cuadricula} />
+          ) : pestana === "reports" ? (
+            <PanelReportes
+              rango={rangoReporte}
+              onCambioRango={setRangoReporte}
+              onAbrirModal={() => setReporteAbierto(true)}
+              filas={filasReporte}
+              cargando={cargandoReporte}
+              error={errorReporte}
+            />
+          ) : pestana === "map" ? (
+            <MapaSensores cuadricula={cuadricula} />
+          ) : (
+            <PanelGraficas />
+          )}
         </section>
 
         {/* ASIDE */}
@@ -392,7 +420,7 @@ function MapaCalor({ cuadricula }) {
               key={celda.id}
               className="relative aspect-square rounded-2xl shadow-lg ring-1 ring-black/10 overflow-hidden"
               title={`${celda.id} — ${formatearLux(celda.lux)} (${Math.round(
-                relacion * 100
+                relacion * 100,
               )}% del objetivo)\n${celda.ts.toLocaleTimeString()}`}
               style={{ background: fondo }}
             >
@@ -415,7 +443,7 @@ function MapaCalor({ cuadricula }) {
               </div>
             </div>
           );
-        })
+        }),
       )}
     </div>
   );
@@ -490,7 +518,7 @@ function MapaCalorMini({ cuadricula }) {
               </div>
             </div>
           );
-        })
+        }),
       )}
     </div>
   );
@@ -569,7 +597,6 @@ function ListaAlertas({ cuadricula }) {
   );
 }
 
-
 // ========== PANEL CLIMA ==========
 
 function PanelClima() {
@@ -578,24 +605,51 @@ function PanelClima() {
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
   const [datos, setDatos] = useState(null);
+  const referenciaPeticionClima = useRef(null);
 
   async function obtenerClima() {
+    if (referenciaPeticionClima.current) {
+      referenciaPeticionClima.current.abort();
+    }
+
+    const controller = new AbortController();
+    referenciaPeticionClima.current = controller;
+
     try {
       setCargando(true);
       setError("");
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitud}&longitude=${longitud}&hourly=temperature_2m,relative_humidity_2m,precipitation,cloud_cover,wind_speed_10m&current=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,is_day&daily=sunrise,sunset,uv_index_max,precipitation_sum&timezone=America%2FMatamoros`;
-      const respuesta = await fetch(url);
-      if (!respuesta.ok) throw new Error("No se pudo obtener el clima");
-      setDatos(await respuesta.json());
+      const data = await fetchJson(url, {
+        timeoutMs: 8000,
+        retries: 1,
+        cacheTtlMs: 60000,
+        signal: controller.signal,
+      });
+      if (!controller.signal.aborted) {
+        setDatos(data);
+      }
     } catch (e) {
-      setError(e.message || "Error de red");
+      if (e?.name !== "AbortError") {
+        setError(e.message || "Error de red");
+      }
     } finally {
-      setCargando(false);
+      if (referenciaPeticionClima.current === controller) {
+        referenciaPeticionClima.current = null;
+      }
+      if (!controller.signal.aborted) {
+        setCargando(false);
+      }
     }
   }
 
   useEffect(() => {
     obtenerClima();
+
+    return () => {
+      if (referenciaPeticionClima.current) {
+        referenciaPeticionClima.current.abort();
+      }
+    };
   }, []);
 
   const ahora = new Date();
@@ -662,7 +716,9 @@ function PanelClima() {
       </div>
 
       <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
-        <div className="text-sm font-semibold mb-2">Resumen del clima por hora</div>
+        <div className="text-sm font-semibold mb-2">
+          Resumen del clima por hora
+        </div>
         {datos?.hourly ? (
           <ResumenPorHora porHora={datos.hourly} />
         ) : (
@@ -836,105 +892,104 @@ function ModalReporte({ onCerrar, rango, filas }) {
             min: Math.min(...filas.map((fila) => fila.min)),
             max: Math.max(...filas.map((fila) => fila.max)),
           },
-    [filas]
+    [filas],
   );
 
   return (
     <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-  {/* Contenedor del modal */}
-  <div className="w-full max-w-4xl max-h-[85vh] rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl flex flex-col overflow-hidden">
-    {/* Header */}
-    <div className="px-5 py-3 border-b border-slate-800 flex items-center justify-between">
-      <h3 className="text-sm font-semibold text-slate-100">
-        Reporte por{" "}
-        {rango === "day" ? "día" : rango === "week" ? "semana" : "mes"}
-      </h3>
-      <button
-        onClick={onCerrar}
-        className="text-xs px-2 py-1 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800"
-      >
-        Cerrar
-      </button>
+      {/* Contenedor del modal */}
+      <div className="w-full max-w-4xl max-h-[85vh] rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="px-5 py-3 border-b border-slate-800 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-slate-100">
+            Reporte por{" "}
+            {rango === "day" ? "día" : rango === "week" ? "semana" : "mes"}
+          </h3>
+          <button
+            onClick={onCerrar}
+            className="text-xs px-2 py-1 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800"
+          >
+            Cerrar
+          </button>
+        </div>
+
+        {/* Cuerpo del modal */}
+        <div className="px-5 pt-4 pb-3 space-y-4 flex-1 flex flex-col overflow-hidden">
+          {/* Indicadores arriba */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <IndicadorKPI
+              etiqueta="Promedio"
+              valor={formatearLux(indicadores.avg)}
+            />
+            <IndicadorKPI
+              etiqueta="Máximo"
+              valor={formatearLux(indicadores.max)}
+            />
+            <IndicadorKPI
+              etiqueta="Mínimo"
+              valor={formatearLux(indicadores.min)}
+            />
+          </div>
+
+          {/* Tabla scrollable */}
+          <div className="flex-1 min-h-0 rounded-xl border border-slate-800 bg-slate-900/40 overflow-x-auto overflow-y-auto">
+            <table className="min-w-full text-xs sm:text-sm">
+              <thead className="sticky top-0 z-10 bg-slate-900">
+                <tr className="text-left text-slate-300">
+                  <th className="py-2 px-3 font-medium">Periodo</th>
+                  <th className="py-2 px-3 font-medium">Lux promedio</th>
+                  <th className="py-2 px-3 font-medium">Lux máx</th>
+                  <th className="py-2 px-3 font-medium">Lux mín</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filas.map((fila) => (
+                  <tr
+                    key={fila.key}
+                    className="border-t border-slate-800 hover:bg-slate-800/50"
+                  >
+                    <td className="py-1.5 px-3 text-slate-200">{fila.key}</td>
+                    <td className="py-1.5 px-3 text-slate-200">
+                      {Math.round(fila.avg)}
+                    </td>
+                    <td className="py-1.5 px-3 text-slate-200">
+                      {Math.round(fila.max)}
+                    </td>
+                    <td className="py-1.5 px-3 text-slate-200">
+                      {Math.round(fila.min)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Botones abajo */}
+          <div className="pt-3 mt-1 border-t border-slate-800 flex flex-wrap justify-end gap-2">
+            <button
+              onClick={() =>
+                downloadCSV(filas, `reporte_detallado_${rango}.csv`)
+              }
+              className="px-3 py-1.5 rounded-xl text-xs sm:text-sm border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-100"
+            >
+              Descargar CSV
+            </button>
+            <button
+              onClick={onCerrar}
+              className="px-3 py-1.5 rounded-xl text-xs sm:text-sm border border-slate-700 hover:bg-slate-800 text-slate-100"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
-
-    {/* Cuerpo del modal */}
-    <div className="px-5 pt-4 pb-3 space-y-4 flex-1 flex flex-col overflow-hidden">
-      {/* Indicadores arriba */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <IndicadorKPI
-          etiqueta="Promedio"
-          valor={formatearLux(indicadores.avg)}
-        />
-        <IndicadorKPI
-          etiqueta="Máximo"
-          valor={formatearLux(indicadores.max)}
-        />
-        <IndicadorKPI
-          etiqueta="Mínimo"
-          valor={formatearLux(indicadores.min)}
-        />
-      </div>
-
-      {/* Tabla scrollable */}
-      <div className="flex-1 min-h-0 rounded-xl border border-slate-800 bg-slate-900/40 overflow-x-auto overflow-y-auto">
-        <table className="min-w-full text-xs sm:text-sm">
-          <thead className="sticky top-0 z-10 bg-slate-900">
-            <tr className="text-left text-slate-300">
-              <th className="py-2 px-3 font-medium">Periodo</th>
-              <th className="py-2 px-3 font-medium">Lux promedio</th>
-              <th className="py-2 px-3 font-medium">Lux máx</th>
-              <th className="py-2 px-3 font-medium">Lux mín</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filas.map((fila) => (
-              <tr
-                key={fila.key}
-                className="border-t border-slate-800 hover:bg-slate-800/50"
-              >
-                <td className="py-1.5 px-3 text-slate-200">{fila.key}</td>
-                <td className="py-1.5 px-3 text-slate-200">
-                  {Math.round(fila.avg)}
-                </td>
-                <td className="py-1.5 px-3 text-slate-200">
-                  {Math.round(fila.max)}
-                </td>
-                <td className="py-1.5 px-3 text-slate-200">
-                  {Math.round(fila.min)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Botones abajo */}
-      <div className="pt-3 mt-1 border-t border-slate-800 flex flex-wrap justify-end gap-2">
-        <button
-          onClick={() =>
-            downloadCSV(filas, `reporte_detallado_${rango}.csv`)
-          }
-          className="px-3 py-1.5 rounded-xl text-xs sm:text-sm border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-100"
-        >
-          Descargar CSV
-        </button>
-        <button
-          onClick={onCerrar}
-          className="px-3 py-1.5 rounded-xl text-xs sm:text-sm border border-slate-700 hover:bg-slate-800 text-slate-100"
-        >
-          Cerrar
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
   );
 }
 
-
 function PanelGraficas() {
   const [rangoGeneral, setRangoGeneral] = useState(1); // horas para la gráfica grande
+  const rangoGeneralDebounced = useDebouncedValue(rangoGeneral, 220);
 
   return (
     <div className="space-y-6">
@@ -960,11 +1015,13 @@ function PanelGraficas() {
       {/* Gráfica grande general con los 9 sensores */}
       <GraficaGeneral
         sensorIds={[1, 2, 3, 4, 5, 6, 7, 8, 9]}
-        rangoHoras={rangoGeneral}
+        rangoHoras={rangoGeneralDebounced}
       />
 
       {/* Tus gráficas individuales, tal cual estaban */}
-      <h2 className="text-lg font-medium">Intensidad de cada sensor por hora</h2>
+      <h2 className="text-lg font-medium">
+        Intensidad de cada sensor por hora
+      </h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <GraficaHoras sensorId={1} />
         <GraficaHoras sensorId={2} />
@@ -989,7 +1046,9 @@ function downloadCSV(filas, filename) {
   const lineas = [
     encabezados.join(","),
     ...filas.map((f) =>
-      [f.key, Math.round(f.avg), Math.round(f.max), Math.round(f.min)].join(",")
+      [f.key, Math.round(f.avg), Math.round(f.max), Math.round(f.min)].join(
+        ",",
+      ),
     ),
   ];
 

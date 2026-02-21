@@ -9,6 +9,8 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
+import { API_BASE_URL } from "../config/api";
+import { fetchJson } from "../lib/http";
 
 ChartJS.register(
   LineElement,
@@ -16,25 +18,22 @@ ChartJS.register(
   CategoryScale,
   LinearScale,
   Tooltip,
-  Legend
+  Legend,
 );
 
-const API_BASE_URL = "http://localhost:3000";
-
-const INTERVALO_MINUTOS = 1; 
+const INTERVALO_MINUTOS = 1;
 
 const COLORES = [
-  "rgba(16, 185, 129, 1)",   // verde
-  "rgba(59, 130, 246, 1)",   // azul
-  "rgba(244, 114, 182, 1)",  // rosa
-  "rgba(234, 179, 8, 1)",    // amarillo
-  "rgba(56, 189, 248, 1)",   // celeste
-  "rgba(249, 115, 22, 1)",   // naranja
-  "rgba(139, 92, 246, 1)",   // morado
-  "rgba(45, 212, 191, 1)",   // turquesa
-  "rgba(248, 113, 113, 1)",  // rojo suave
+  "rgba(16, 185, 129, 1)", // verde
+  "rgba(59, 130, 246, 1)", // azul
+  "rgba(244, 114, 182, 1)", // rosa
+  "rgba(234, 179, 8, 1)", // amarillo
+  "rgba(56, 189, 248, 1)", // celeste
+  "rgba(249, 115, 22, 1)", // naranja
+  "rgba(139, 92, 246, 1)", // morado
+  "rgba(45, 212, 191, 1)", // turquesa
+  "rgba(248, 113, 113, 1)", // rojo suave
 ];
-
 
 function agruparCadaNMin(lecturas, nMin) {
   const buckets = {};
@@ -42,7 +41,7 @@ function agruparCadaNMin(lecturas, nMin) {
   for (const d of lecturas) {
     const t = d.ts instanceof Date ? d.ts : new Date(d.ts);
     const minutos = t.getMinutes();
-    const bucketMin = minutos - (minutos % nMin); 
+    const bucketMin = minutos - (minutos % nMin);
     const tsBucket = new Date(
       t.getFullYear(),
       t.getMonth(),
@@ -50,9 +49,9 @@ function agruparCadaNMin(lecturas, nMin) {
       t.getHours(),
       bucketMin,
       0,
-      0
+      0,
     );
-    const clave = tsBucket.getTime(); 
+    const clave = tsBucket.getTime();
 
     if (!buckets[clave]) {
       buckets[clave] = { ts: tsBucket, sum: 0, count: 0 };
@@ -63,7 +62,7 @@ function agruparCadaNMin(lecturas, nMin) {
 
   return Object.values(buckets)
     .map((b) => ({
-      ts: b.ts,               
+      ts: b.ts,
       lux: b.sum / b.count,
     }))
     .sort((a, b) => a.ts - b.ts);
@@ -76,15 +75,21 @@ export default function GraficaGeneral({
   const [series, setSeries] = useState([]);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     async function cargar() {
       try {
         const respuestas = await Promise.all(
           sensorIds.map((id) =>
-            fetch(`${API_BASE_URL}/api/series?sensorId=${id}`)
-          )
+            fetchJson(`${API_BASE_URL}/api/series?sensorId=${id}`, {
+              timeoutMs: 5000,
+              retries: 2,
+              cacheTtlMs: 5000,
+              signal: controller.signal,
+            }),
+          ),
         );
-
-        const jsons = await Promise.all(respuestas.map((r) => r.json()));
+        const jsons = respuestas;
 
         const ahoraMs = Date.now();
         const limiteMs = ahoraMs - rangoHoras * 60 * 60 * 1000;
@@ -107,30 +112,38 @@ export default function GraficaGeneral({
               (l) =>
                 l.ts instanceof Date &&
                 !isNaN(l.ts) &&
-                l.ts.getTime() >= limiteMs
+                l.ts.getTime() >= limiteMs,
             );
 
           const lecturasAgrupadas = agruparCadaNMin(
             lecturasOriginales,
-            INTERVALO_MINUTOS
+            INTERVALO_MINUTOS,
           );
 
           return { sensorId: id, lecturas: lecturasAgrupadas };
         });
 
-        setSeries(datosPorSensor);
+        if (!controller.signal.aborted) {
+          setSeries(datosPorSensor);
+        }
       } catch (e) {
-        console.error("Error al cargar series generales", e);
+        if (e?.name !== "AbortError") {
+          console.error("Error al cargar series generales", e);
+        }
       }
     }
 
     cargar();
+
+    return () => {
+      controller.abort();
+    };
   }, [sensorIds, rangoHoras]);
 
   const labels = useMemo(() => {
     const base = series[0]?.lecturas || [];
     return base.map((l) =>
-      l.ts.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      l.ts.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     );
   }, [series]);
 
@@ -143,7 +156,7 @@ export default function GraficaGeneral({
         borderColor: COLORES[idx % COLORES.length],
         backgroundColor: COLORES[idx % COLORES.length].replace(
           ", 1)",
-          ", 0.25)"
+          ", 0.25)",
         ),
         borderWidth: 2,
         tension: 0.3,

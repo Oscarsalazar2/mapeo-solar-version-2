@@ -1,34 +1,50 @@
 # Mapeo Solar
 
 ## Requisitos
-- Node 18+
+
+- Node.js 18+
 - PostgreSQL 14+
- 
- para node es este link  https://nodejs.org/es/download
- y yo tengo postgres de manera local pero lo podemos checar okey
+
+Descarga Node.js: https://nodejs.org/es/download
 
 ## Base de datos
+
 ```bash
 createdb mapeo_solar
 psql mapeo_solar -f db/schema.sql
 psql mapeo_solar -f db/views.sql
 ```
-esto si tienen cmd si no pues copian y pegan 
 
 ## Servidor
+
 ```bash
 cd server
-cp .env.example .env   # este se esita ahuevo como .env pero en un futuro lo hacemos
+copy .env.example .env
 npm i
 npm start
 ```
 
+Variables en `server/.env`:
+
+- `DATABASE_URL`: conexión a PostgreSQL
+- `PORT`: puerto del backend (por defecto `3000`)
+- `CORS_ORIGIN`: origen permitido del frontend (por defecto `http://localhost:5173`)
+- `DEMO_MODE`: `true` o `false`
+
 ## Frontend
+
 ```bash
 cd frontend
+copy .env.example .env
 npm i
 npm run dev
 ```
-y buscan el `http://localhost:5173` ah jajajs y el servidor se abre en el 3000 `http://localhost:3000`
 
+Variables en `frontend/.env`:
 
+- `VITE_API_BASE_URL`: URL base del backend (por defecto `http://localhost:3000`)
+
+## URLs locales
+
+- Frontend: http://localhost:5173
+- Backend: http://localhost:3000

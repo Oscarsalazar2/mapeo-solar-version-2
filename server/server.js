@@ -6,14 +6,54 @@ import { WebSocketServer } from "ws";
 
 const { Pool } = pkg;
 
-const DEMO_MODE = false;
+const DEMO_MODE = process.env.DEMO_MODE === "true";
 const FILAS = 3;
 const COLUMNAS = 3;
+const puerto = Number(process.env.PORT || 3000);
+const rawCorsOrigins = process.env.CORS_ORIGIN || "http://localhost:5173";
+const allowedOrigins = rawCorsOrigins
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+const querySeriesSchema = z.object({
+  sensorId: z.coerce.number().int().positive().default(1),
+  from: z.string().optional(),
+  to: z.string().optional(),
+});
+
+const rangeSchema = z.enum(["day", "week", "month"]);
+
+const lecturasBatchSchema = z.object({
+  lecturas: z
+    .array(
+      z.object({
+        sensor_id: z.coerce.number().int().positive(),
+        lux: z.coerce.number().finite(),
+      }),
+    )
+    .min(1)
+    .max(500),
+});
 
 // Servidor Fastify
 const servidor = Fastify({ logger: true });
 
-await servidor.register(cors, { origin: "*" });
+await servidor.register(cors, {
+  origin: (origin, callback) => {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error("Origen no permitido por CORS"), false);
+  },
+});
 
 // Conexión BD REAL
 const bd = new Pool({
@@ -22,11 +62,21 @@ const bd = new Pool({
     "postgres://postgres:root@localhost:5432/mapeo_solar",
 });
 
+servidor.setErrorHandler((error, _request, reply) => {
+  servidor.log.error(error);
+  reply.code(500).send({ ok: false, error: "Error interno del servidor" });
+});
+
+servidor.get("/api/health", async () => ({ ok: true }));
+
 // ENDPOINT SERIES POR SENSOR
-servidor.get("/api/series", async (req, _reply) => {
-  const sensorId = Number(req.query.sensorId || 1);
-  const from = req.query.from || null;
-  const to = req.query.to || null;
+servidor.get("/api/series", async (req, reply) => {
+  const validado = querySeriesSchema.safeParse(req.query || {});
+  if (!validado.success) {
+    return reply.code(400).send({ ok: false, error: "Parámetros inválidos" });
+  }
+
+  const { sensorId, from, to } = validado.data;
 
   if (DEMO_MODE) return generarSeriesDemo(sensorId);
 
@@ -42,7 +92,6 @@ servidor.get("/api/series", async (req, _reply) => {
   const { rows } = await bd.query(consulta, [sensorId, from, to]);
   return rows;
 });
-
 
 //  ENDPOINT HEATMAP
 servidor.get("/api/heatmap", async (req, _reply) => {
@@ -61,7 +110,7 @@ servidor.get("/api/heatmap", async (req, _reply) => {
         });
       }
     }
-    
+
     return { grid: demo };
   }
 
@@ -87,18 +136,14 @@ servidor.get("/api/heatmap", async (req, _reply) => {
   return { grid: rows };
 });
 
-
-
 // ENDPOINT REPORTES
 servidor.get("/api/reports", async (req, _reply) => {
-  const esquemaRango = z.enum(["day", "week", "month"]);
-  const validado = esquemaRango.safeParse(req.query.range);
+  const validado = rangeSchema.safeParse(req.query.range);
   const rango = validado.success ? validado.data : "day";
 
   if (DEMO_MODE) return generarReportesDemo(rango);
 
   let consulta = "";
-
 
   // DÍA → 00:00 a 23:00 de HOY
   if (rango === "day") {
@@ -203,39 +248,40 @@ servidor.get("/api/reports", async (req, _reply) => {
   }));
 });
 
-
-
-
 // ENDPOINT BATCH DESDE ESP32
 
 servidor.post("/api/lecturas-multi", async (req, reply) => {
-  const { lecturas } = req.body || {};
-
-  if (!lecturas || !Array.isArray(lecturas)) {
-    return reply
-      .code(400)
-      .send({ ok: false, error: "Se requiere arreglo lecturas[]" });
+  const validado = lecturasBatchSchema.safeParse(req.body || {});
+  if (!validado.success) {
+    return reply.code(400).send({
+      ok: false,
+      error: "Se requiere arreglo lecturas[] válido (1-500 elementos)",
+    });
   }
 
+  const { lecturas } = validado.data;
+
   try {
-    for (const l of lecturas) {
-      await bd.query(
-        `INSERT INTO lecturas (sensor_id, lux, ts)
-         VALUES ($1, $2, NOW())`,
-        [l.sensor_id, l.lux]
-      );
-    }
+    const sensorIds = lecturas.map((l) => l.sensor_id);
+    const luxValues = lecturas.map((l) => l.lux);
+
+    await bd.query(
+      `INSERT INTO lecturas (sensor_id, lux, ts)
+       SELECT t.sensor_id, t.lux, clock_timestamp()
+       FROM unnest($1::int[], $2::numeric[]) AS t(sensor_id, lux)`,
+      [sensorIds, luxValues],
+    );
 
     return { ok: true, count: lecturas.length };
   } catch (err) {
     servidor.log.error(err);
-    return reply.code(500).send({ ok: false, error: "Error al insertar batch" });
+    return reply
+      .code(500)
+      .send({ ok: false, error: "Error al insertar batch" });
   }
 });
 
-
-
-//     GET /api/lecturas/latest 
+//     GET /api/lecturas/latest
 servidor.get("/api/lecturas/latest", async (req, _reply) => {
   const consulta = `
     SELECT 
@@ -261,7 +307,6 @@ servidor.get("/api/lecturas/latest", async (req, _reply) => {
   }));
 });
 
-
 //  WEBSOCKET (DEMO)
 
 const wsServidor = new WebSocketServer({ noServer: true });
@@ -269,16 +314,26 @@ const wsServidor = new WebSocketServer({ noServer: true });
 servidor.server.on("upgrade", (req, socket, head) => {
   if (req.url === "/ws") {
     wsServidor.handleUpgrade(req, socket, head, (ws) => {
-      ws.send(
-        JSON.stringify({ tipo: "hola", ts: new Date().toISOString() })
-      );
+      ws.send(JSON.stringify({ tipo: "hola", ts: new Date().toISOString() }));
     });
   }
 });
 
-
 // INICIAR SERVIDOR
-const puerto = process.env.PORT || 3000;
+async function cerrarServidor(signal) {
+  servidor.log.info({ signal }, "Cerrando servidor...");
+  await servidor.close();
+  await bd.end();
+  process.exit(0);
+}
+
+process.on("SIGINT", () => {
+  void cerrarServidor("SIGINT");
+});
+
+process.on("SIGTERM", () => {
+  void cerrarServidor("SIGTERM");
+});
 
 servidor.listen({ port: puerto, host: "0.0.0.0" }).catch((err) => {
   servidor.log.error(err);

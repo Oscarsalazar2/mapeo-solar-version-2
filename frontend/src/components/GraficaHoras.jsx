@@ -9,6 +9,9 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
+import { API_BASE_URL } from "../config/api";
+import { fetchJson } from "../lib/http";
+import useDebouncedValue from "../hooks/useDebouncedValue";
 
 ChartJS.register(
   LineElement,
@@ -16,14 +19,10 @@ ChartJS.register(
   CategoryScale,
   LinearScale,
   Tooltip,
-  Legend
+  Legend,
 );
 
-const API_BASE_URL = "http://localhost:3000";
-
-
 const INTERVALO_MINUTOS = 1; // Minutos
-
 
 // Agrupar lecturas cada N min
 function agruparCadaNMin(datos, nMin) {
@@ -41,7 +40,7 @@ function agruparCadaNMin(datos, nMin) {
       t.getHours(),
       bucketMin,
       0,
-      0
+      0,
     ).toISOString();
 
     if (!buckets[clave]) {
@@ -63,40 +62,50 @@ export default function GraficaHoras({ sensorId = 1 }) {
   const [datos, setDatos] = useState([]);
   const [rangoHoras, setRangoHoras] = useState(1);
   const [cargando, setCargando] = useState(false);
+  const rangoHorasDebounced = useDebouncedValue(rangoHoras, 220);
 
-  async function cargar() {
+  async function cargar(signal) {
     try {
       setCargando(true);
 
       const ahora = new Date();
       const desde = new Date(
-        ahora.getTime() - rangoHoras * 60 * 60 * 1000
+        ahora.getTime() - rangoHorasDebounced * 60 * 60 * 1000,
       ).toISOString();
 
-      const res = await fetch(
+      const json = await fetchJson(
         `${API_BASE_URL}/api/series?sensorId=${sensorId}&from=${encodeURIComponent(
-          desde
-        )}`
+          desde,
+        )}`,
+        {
+          timeoutMs: 5000,
+          retries: 2,
+          cacheTtlMs: 5000,
+          signal,
+        },
       );
-
-      if (!res.ok) {
-        console.error("Error al cargar /api/series", res.status);
-        setDatos([]);
-        return;
+      if (!signal?.aborted) {
+        setDatos(json);
       }
-
-      const json = await res.json();
-      setDatos(json);
     } catch (e) {
-      console.error("Error al cargar /api/series", e);
+      if (e?.name !== "AbortError") {
+        console.error("Error al cargar /api/series", e);
+      }
     } finally {
-      setCargando(false);
+      if (!signal?.aborted) {
+        setCargando(false);
+      }
     }
   }
 
   useEffect(() => {
-    cargar();
-  }, [sensorId, rangoHoras]);
+    const controller = new AbortController();
+    cargar(controller.signal);
+
+    return () => {
+      controller.abort();
+    };
+  }, [sensorId, rangoHorasDebounced]);
 
   // AGRUPAR DATOS
   const datosAgrupados = agruparCadaNMin(datos, INTERVALO_MINUTOS);
@@ -105,7 +114,7 @@ export default function GraficaHoras({ sensorId = 1 }) {
     new Date(d.ts).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
-    })
+    }),
   );
 
   const valores = datosAgrupados.map((d) => d.lux);
